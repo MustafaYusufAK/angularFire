@@ -1,8 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { Note } from '../interfaces/note.interface';
-import { Firestore, collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, orderBy, limit, where } from '@angular/fire/firestore';
+import { Firestore, collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, orderBy, limit, where, query } from '@angular/fire/firestore';
 import { Observable } from 'rxjs';
-import { query } from '@angular/animations';
+
 
 @Injectable({
   providedIn: 'root'
@@ -11,18 +11,20 @@ export class NoteListService {
 
   trashNotes: Note[] = [];
   normalNotes: Note[] = [];
+  normalMarkedNotes: Note[] = [];
 
 
   unsubTrash;
   unsubNotes;
+  unsubMarkedNotes;
 
 
   firestore: Firestore = inject(Firestore);
 
   constructor() {
-
     this.unsubTrash = this.subTrashList();
     this.unsubNotes = this.subNotesList();
+    this.unsubMarkedNotes = this.subMarkedNotesList();
   }
 
   async deleteNote(colId: "notes" | "trash", docId: string) {
@@ -36,6 +38,7 @@ export class NoteListService {
   ngonDestroy() {
     this.unsubNotes();
     this.unsubTrash();
+    this.unsubMarkedNotes();
   }
 
   setNoteObject(obj: any, id: string): Note {
@@ -58,18 +61,45 @@ export class NoteListService {
   }
 
   subNotesList() {
-    const q = query(this.getNotesRef(), where("state", "==", "CA"));
+    const q = query(this.getNotesRef(), limit(100));
     return onSnapshot(q, (list) => {
       this.normalNotes = [];
       list.forEach(element => {
         this.normalNotes.push(this.setNoteObject(element.data(), element.id));
       });
+      list.docChanges().forEach((change) => {
+        if (change.type === "added") {
+          console.log("New note: ", change.doc.data());
+        }
+        if (change.type === "modified") {
+          console.log("Modified note: ", change.doc.data());
+        }
+        if (change.type === "removed") {
+          console.log("Removed note: ", change.doc.data());
+        }
+      });
+    });
+  }
+
+  subMarkedNotesList() {
+    const q = query(this.getNotesRef(), where("marked", "==", true,), limit(4));
+    return onSnapshot(q, (list) => {
+      this.normalMarkedNotes = [];
+      list.forEach(element => {
+        this.normalMarkedNotes.push(this.setNoteObject(element.data(), element.id));
+      });
     });
   }
 
   async addNote(item: Note, colId: "notes" | "trash") {
-    if (colId) {
+    if (colId == 'notes') {
       await addDoc(this.getNotesRef(), item).catch(
+        (err) => { console.error(err) }
+      ).then(
+        (docRef) => { console.log("Document written with ID: ", docRef?.id) }
+      )
+    } else if (colId == 'trash') {
+      await addDoc(this.getTrashRef(), item).catch(
         (err) => { console.error(err) }
       ).then(
         (docRef) => { console.log("Document written with ID: ", docRef?.id) }
